@@ -51,21 +51,35 @@ const userController = {
     res.redirect('/signin')
   },
   getUser: (req, res, next) => {
-    return User.findByPk(req.params.id,
-      {
-        // 拿到關聯的comment，再拿到comment關聯的Rest
-        include: [
-          { model: Comment, include: Restaurant }
-        ]
+    return Promise.all([
+      User.findByPk(req.params.id,
+        {
+          include: [
+            // { model: Comment, include: Restaurant },
+            { model: Restaurant, as: 'FavoritedRestaurants' },
+            { model: User, as: 'Followers' },
+            { model: User, as: 'Followings' }
+          ]
+        }),
+      Comment.findAll({
+        raw: true,
+        nest: true,
+        where: { userId: req.params.id },
+        include: Restaurant,
+        group: 'restaurantId', // 找出同1間餐廳同1位使用者的所有評論
+        attributes: ['restaurantId']
       })
-      .then(user => {
-        if (!user) throw new Error('這位使用者不存在!')
-        // console.log(user)
-        const userData = user.toJSON()
-        // console.log(userData)
+    ])
+      .then(([userData, comments]) => {
+        if (!userData) throw new Error('這位使用者不存在!')
+        const loginUser = getUser(req)
+        // console.log(userData.toJSON())
+        // console.log(comments)
         res.render('users/profile', {
-          user: getUser(req),
-          userData
+          userData: userData.toJSON(),
+          loginUser,
+          comments,
+          isFollowed: req.user.Followings.some(f => f.id === userData.id)
         })
       })
       .catch(err => next(err))
@@ -182,14 +196,13 @@ const userController = {
       include: [{ model: User, as: 'Followers' }]
     })
       .then(users => {
-      // 整理 users 資料，把每個 user 項目都拿出來處理一次，並把新陣列儲存在 users 裡
+        // 整理 users 資料，把每個 user 項目都拿出來處理一次，並把新陣列儲存在 users 裡
         const result = users.map(user => ({
           ...user.toJSON(), // 整理格式
           followerCount: user.Followers.length, // 計算追蹤者人數
           isFollowed: req.user.Followings.some(f => f.id === user.id) // 判斷目前登入使用者是否已追蹤該 user
         }))
-          .sort((a, b) => b.followerCount - a.followerCount)
-        // console.log(users)
+          .sort((a, b) => b.followerCount - a.followerCount).slice(0, 10)
         res.render('top-users', { users: result })
       })
       .catch(err => next(err))
