@@ -53,7 +53,10 @@ const restaurantController = {
           { model: Comment, include: User }, // 要拿到關聯的 Comment，再拿到 Comment 關聯的 User，要做兩次的查詢
           { model: User, as: 'FavoritedUsers' }, // 透過 Restaurant model 取得 與 User model 的關係為"已收藏這間餐廳的使用者"
           { model: User, as: 'LikedUsers' }
-        ]
+        ],
+        order: [
+          [Comment, 'createdAt', 'DESC']
+        ] // order 第1個參數放model，第2個放屬性，第3個放排序
       })
       .then(restaurant => {
         // console.log(restaurant.Comments[0].dataValues)
@@ -74,13 +77,14 @@ const restaurantController = {
   getDashboard: (req, res, next) => {
     return Restaurant.findByPk(req.params.id,
       {
-        raw: true,
-        nest: true,
-        include: Category
+        // raw: true,
+        // nest: true,
+        include: [Category, Comment]
       })
       .then(restaurant => {
         if (!restaurant) throw new Error('這間餐廳不存在!')
-        res.render('dashboard', { restaurant })
+        res.render('dashboard', { restaurant: restaurant.toJSON() })
+        console.log(restaurant)
       })
       .catch(err => next(err))
   },
